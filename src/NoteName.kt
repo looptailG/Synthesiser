@@ -1,3 +1,5 @@
+// todo: remove this enum.
+
 enum class NoteName {
 	C, D, E, F, G, A, B, REST;
 
