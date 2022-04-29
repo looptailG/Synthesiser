@@ -53,9 +53,10 @@ class Synthesiser(configFilePath: String) {
 	}
 
 	fun testStart() {
-		val filePath = "music/2021-03-08_PreludeAMinor_Loop.musicxml"
+//		val filePath = "music/2022-03-05_FrontierBrain.musicxml"
+		val filePath = "music/2021-12-08_PassacagliaInCMinor_Loop.musicxml"
 		parser = MusicXmlParser(verbose)
-		tuner = EDOTuner(nSteps = 31, verbose = verbose)
+		tuner = WellTemperamentTuner(verbose = verbose)
 
 		val fileData = parser.parse(filePath)
 		stepTime = fileData["STEP_TIME"]!!.toString().toFloat()
