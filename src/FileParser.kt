@@ -1,3 +1,4 @@
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 
@@ -353,6 +354,66 @@ class MusicXmlParser(verbose: Boolean = false): FileParser(verbose) {
 			// Remove the <part> at the beginning of the String.
 			.substring("<part>".length)
 		// todo: check that the total duration of every part sums up to the correct amount.
+
+		return returnValue
+	}
+}
+
+class JsonParser(verbose: Boolean = false): FileParser(verbose) {
+	/**
+	 * Parse the input audio file, and return a Map containing the file data.
+	 */
+	override fun parse(inputFile: String): Map<String, Any> {
+		if (verbose) {
+			println("+--------------------+")
+			println("¦ FILE PARSER - JSON ¦")
+			println("+--------------------+")
+		}
+
+		val returnValue = mutableMapOf<String, Any>()
+
+		if (verbose) {
+			println("Input file: $inputFile")
+		}
+		val fileData = JSONObject(File(inputFile).readText())
+		for (key in fileData.keySet()) {
+			// Don't print the note data, usually it's very long, and can create
+			// lag in the output console.
+			if (verbose && (key != "NOTES_DATA")) {
+				println("$key: ${fileData[key]}")
+			}
+			returnValue[key] = fileData[key]
+		}
+
+		// Check that the parts have the correct number of steps.
+		val nSteps: Int
+		try {
+			nSteps = returnValue["N_STEPS"].toString().toInt()
+		}
+		catch (ee: NumberFormatException) {
+			ee.printStackTrace()
+			throw IOException("Wrongly formatted \"N_STEPS\" value: ${returnValue["N_STEPS"]}")
+		}
+		returnValue["NOTES_DATA"].toString()
+			.split("<part>")
+			.forEachIndexed { partCounter, notesData ->
+				var stepCounter = 0
+				for (note in notesData.split("|")) {
+					try {
+						stepCounter += note.split("_")[3].toInt()
+					}
+					catch (ee: NumberFormatException) {
+						throw IOException("Wrongly formatted note in the part Nº $partCounter: $note")
+					}
+				}
+				if (stepCounter != nSteps) {
+					throw IOException(
+						"Incorrect number of steps in the part Nº $partCounter:\n"
+						+ "N_STEPS: $nSteps\n"
+						+ "Part Nº $partCounter: $stepCounter"
+					)
+				}
+			}
 
 		return returnValue
 	}
