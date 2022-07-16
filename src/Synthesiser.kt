@@ -54,8 +54,10 @@ class Synthesiser(configFilePath: String) {
 
 	fun testStart() {
 //		val filePath = "music/2022-03-05_FrontierBrain.json"
-		val filePath = "music/2021-12-08_PassacagliaInCMinor_Loop.musicxml"
-		parser = MusicXmlParser(verbose)
+//		val filePath = "music/2022-07-03_PassacagliaInCMinor.musicxml"
+//		val filePath = "music/TestDC.musicxml"
+		val filePath = "music/TestMidi.mid"
+		parser = MidiFileParser(verbose)
 		tuner = WellTemperamentTuner(verbose = verbose)
 
 		val fileData = parser.parse(filePath)

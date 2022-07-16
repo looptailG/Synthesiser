@@ -5,6 +5,9 @@ class MidiFileParser(verbose: Boolean = false): FileParser(verbose) {
 	/** Current position in the fileData list. */
 	private var index = 0
 
+	private var tempo = 0u
+	private var bpm = 0
+
 	/**
 	 * Parse the input audio file, and return a Map containing the file data.
 	 */
@@ -31,7 +34,7 @@ class MidiFileParser(verbose: Boolean = false): FileParser(verbose) {
 		val divisions = read16()
 		if (verbose) {
 			println("File ID: $fileID")
-			println("Header Length: $headerLength")
+			println("Header length: $headerLength")
 			println("Format: $format")
 			println("Track chunks: $trackChunks")
 			println("Divisions: $divisions")
@@ -39,7 +42,204 @@ class MidiFileParser(verbose: Boolean = false): FileParser(verbose) {
 
 		// Read track data.
 		for (chunk in 0 until trackChunks.toInt()) {
+			if (verbose)
+				println("-- Track $chunk --")
 
+			// Read track header.
+			val trackID = read32()
+			val trackLength = read32()
+			if (verbose) {
+				println("Track ID: $trackID")
+				println("Track length: $trackLength")
+			}
+
+			var endOfTrack = false
+			var previousStatus: UByte = 0u
+			while ((index < fileData.size) && !endOfTrack) {
+				// Read timecode.
+				var statusTimeDelta = readValue()
+				var status = readByte()
+
+				// If the most significant bit is not set, we use the previous
+				// status.
+				if (status < 0x80u) {
+					status = previousStatus
+					// With this implementation we read a byte that we shouldn't
+					// have, go back one step in the fileData list.
+					index--
+				}
+
+				when (status and 0x80u) {
+					VOICE_NOTE_OFF -> {
+						previousStatus = status
+						println("NOTE OFF")
+
+						val channel = status and 0x0Fu
+						val noteID = readByte()
+						val noteVelocity = readByte()
+
+						println("Channel: $channel")
+						println("Note ID: $noteID")
+						println("Velocity: $noteVelocity")
+						println("Time delta: $statusTimeDelta")
+					}
+
+					VOICE_NOTE_ON -> {
+						previousStatus = status
+						println("NOTE ON")
+
+						val channel = status and 0x0Fu
+						val noteID = readByte()
+						val noteVelocity = readByte()
+
+						println("Channel: $channel")
+						println("Note ID: $noteID")
+						println("Velocity: $noteVelocity")
+						println("Time delta: $statusTimeDelta")
+					}
+
+					VOICE_AFTER_TOUCH -> {
+						previousStatus = status
+						println("VOICE AFTER TOUCH")
+
+						val channel = status and 0x0Fu
+						val noteID = readByte()
+						val noteVelocity = readByte()
+					}
+
+					VOICE_CONTROL_CHANGE -> {
+						previousStatus = status
+						println("VOICE CONTROL CHANGE")
+
+						val channel = status and 0x0Fu
+						val controlID = readByte()
+						val controlValue = readByte()
+					}
+
+					VOICE_PROGRAM_CHANGE -> {
+						previousStatus = status
+						println("VOICE PROGRAM CHANGE")
+
+						val channel = status and 0x0Fu
+						val programID = readByte()
+					}
+
+					VOICE_CHANNEL_PRESSURE -> {
+						previousStatus = status
+						println("VOICE CHANNEL PRESSURE")
+
+						val channel = status and 0x0Fu
+						val channelPressure = readByte()
+					}
+
+					VOICE_PITCH_BEND -> {
+						previousStatus = status
+						println("VOICE PITCH BEND")
+
+						val channel = status and 0x0Fu
+						val LS7B = readByte()
+						val MS7B = readByte()
+					}
+
+					SYSTEM_EXCLUSIVE -> {
+						previousStatus = 0u
+
+						if (status.toUInt() == 0xFFu) {
+							// Meta message.
+							val type = readByte()
+							val length = readValue()
+
+							when (type) {
+								META_SEQUENCE -> {
+									println("Sequence number: ${readByte()}${readByte()}")
+								}
+
+								META_TEXT -> {
+									println("Text: ${readString(length)}")
+								}
+
+								META_COPYRIGHT -> {
+									println("Copyright: ${readString(length)}")
+								}
+
+								META_TRACK_NAME -> {
+									println("Track name: ${readString(length)}")
+								}
+
+								META_INSTRUMENT_NAME -> {
+									println("Instrument name: ${readString(length)}")
+								}
+
+								META_LYRICS -> {
+									println("Lyrics: ${readString(length)}")
+								}
+
+								META_MARKER -> {
+									println("Marker: ${readString(length)}")
+								}
+
+								META_CUE_POINT -> {
+									println("Cue: ${readString(length)}")
+								}
+
+								META_CHANNEL_PREFIX -> {
+									println("Prefix: ${readByte()}")
+								}
+
+								META_END_OF_TRACK -> {
+									endOfTrack = true
+								}
+
+								META_SET_TEMPO -> {
+									// Tempo is in μs per quarter note.
+									if (tempo == 0u) {
+										tempo = (readByte().toUInt() and 0x00_00_00_FFu) shl 16
+										tempo = tempo or ((readByte().toUInt() and 0x00_00_00_FFu) shl 8)
+										tempo = tempo or (readByte().toUInt() and 0x00_00_00_FFu)
+										bpm = 60_000_000 / tempo.toInt()
+										println("Tempo: $tempo - BPM: $bpm")
+									}
+								}
+
+								META_SMPTE_OFFSET -> {
+									println("SMPTE: H: ${readByte()} - M: ${readByte()} - S: ${readByte()} - FR: ${readByte()}")
+								}
+
+								META_TIME_SIGNATURE -> {
+									println("Time signature: ${readByte()}/${1 shl readByte().toInt()}")
+									println("Clocks per tick: ${readByte()}")
+									println("32per24Clocks: ${readByte()}")
+								}
+
+								META_KEY_SIGNATURE -> {
+									println("Key signature: ${readByte()}")
+									println("Minor key: ${readByte()}")
+								}
+
+								META_SEQUENCER_SPECIFIC -> {
+									println("Sequencer specific: ${readString(length)}")
+								}
+
+								else -> {
+									System.err.println("Unrecognised meta event: $type")
+								}
+							}
+						}
+						else if (status.toUInt() == 0xF0u) {
+							// System exclusive message begins.
+							println("System exclusive begin: ${readString(readValue())}")
+						}
+						else if (status.toUInt() == 0xF7u) {
+							// System exclusive message ends.
+							println("System exclusive end: ${readString(readValue())}")
+						}
+					}
+
+					else -> {
+						System.err.println("Unrecognised status byte: $status")
+					}
+				}
+			}
 		}
 
 		return mapOf()
@@ -80,10 +280,10 @@ class MidiFileParser(verbose: Boolean = false): FileParser(verbose) {
 	 * Read the specified number of bytes from fileData, and convert it to a
 	 * String.
 	 */
-	private fun readString(length: Int): String {
+	private fun readString(length: UInt): String {
 		// todo: check for unicode values outside the ascii set.
 		var returnValue = ""
-		for (ii in 0 until length) {
+		for (ii in 0u until length) {
 			returnValue += readByte().toInt().toChar()
 		}
 		return returnValue
@@ -118,28 +318,28 @@ class MidiFileParser(verbose: Boolean = false): FileParser(verbose) {
 }
 
 // Events.
-private const val VOICE_NOTE_OFF = 0x80
-private const val VOICE_NOTE_ON = 0x90
-private const val VOICE_AFTER_TOUCH = 0xA0
-private const val VOICE_CONTROL_CHANGE = 0xB0
-private const val VOICE_PROGRAM_CHANGE = 0xC0
-private const val VOICE_CHANNEL_PRESSURE = 0xD0
-private const val VOICE_PITCH_BEND = 0xE0
-private const val SYSTEM_EXCLUSIVE = 0xF0
+private const val VOICE_NOTE_OFF: UByte = 0x80u
+private const val VOICE_NOTE_ON: UByte = 0x90u
+private const val VOICE_AFTER_TOUCH: UByte = 0xA0u
+private const val VOICE_CONTROL_CHANGE: UByte = 0xB0u
+private const val VOICE_PROGRAM_CHANGE: UByte = 0xC0u
+private const val VOICE_CHANNEL_PRESSURE: UByte = 0xD0u
+private const val VOICE_PITCH_BEND: UByte = 0xE0u
+private const val SYSTEM_EXCLUSIVE: UByte = 0xF0u
 
 // Meta events.
-private const val META_SEQUENCE = 0x00;
-private const val META_TEXT = 0x01;
-private const val META_COPYRIGHT = 0x02;
-private const val META_TRACK_NAME = 0x03;
-private const val META_INSTRUMENT_NAME = 0x04;
-private const val META_LYRICS = 0x05;
-private const val META_MARKER = 0x06;
-private const val META_CUE_POINT = 0x07;
-private const val META_CHANNEL_PREFIX = 0x20;
-private const val META_END_OF_TRACK = 0x2F;
-private const val META_SET_TEMPO = 0x51;
-private const val META_SMPTE_OFFSET = 0x54;
-private const val META_TIME_SIGNATURE = 0x58;
-private const val META_KEY_SIGNATURE = 0x59;
-private const val META_SEQUENCER_SPECIFIC = 0x7F;
+private const val META_SEQUENCE: UByte = 0x00u
+private const val META_TEXT: UByte = 0x01u
+private const val META_COPYRIGHT: UByte = 0x02u
+private const val META_TRACK_NAME: UByte = 0x03u
+private const val META_INSTRUMENT_NAME: UByte = 0x04u
+private const val META_LYRICS: UByte = 0x05u
+private const val META_MARKER: UByte = 0x06u
+private const val META_CUE_POINT: UByte = 0x07u
+private const val META_CHANNEL_PREFIX: UByte = 0x20u
+private const val META_END_OF_TRACK: UByte = 0x2Fu
+private const val META_SET_TEMPO: UByte = 0x51u
+private const val META_SMPTE_OFFSET: UByte = 0x54u
+private const val META_TIME_SIGNATURE: UByte = 0x58u
+private const val META_KEY_SIGNATURE: UByte = 0x59u
+private const val META_SEQUENCER_SPECIFIC: UByte = 0x7Fu

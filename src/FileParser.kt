@@ -22,7 +22,7 @@ abstract class FileParser(protected val verbose: Boolean = false) {
 	/**
 	 * Parse the input audio file, and return a Map containing the file data.
 	 */
-	abstract fun parse(inputFile: String): Map<String, Any>
+	abstract fun parse(inputFile: String): Map<String, Any>  // toto: map<string, string>
 }
 
 class MusicXmlParser(verbose: Boolean = false): FileParser(verbose) {

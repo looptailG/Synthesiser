@@ -56,7 +56,7 @@ private class CustomOutputStream(
 	/**
 	 * How many bytes are still to be read to get the complete Unicode value.
 	 */
-	private var counter = 0
+	private var remainingBytes = 0
 
 	init {
 		document = textPane.styledDocument
@@ -65,62 +65,56 @@ private class CustomOutputStream(
 	}
 
 	/**
-	 * Writes the specified byte to this output stream. The general
-	 * contract for `write` is that one byte is written
-	 * to the output stream. The byte to be written is the eight
-	 * low-order bits of the argument `b`. The 24
-	 * high-order bits of `b` are ignored.
-	 *
-	 *
-	 * Subclasses of `OutputStream` must provide an
-	 * implementation for this method.
-	 *
-	 * @param      bb   the `byte`.
-	 * @throws     IOException  if an I/O error occurs. In particular,
-	 * an `IOException` may be thrown if the
-	 * output stream has been closed.
+	 * Writes the specified byte to this output stream.  The general contract
+	 * for `write` is that one byte is written to the output stream.  The byte
+	 * to be written is the eight low-order bits of the argument `bb`.  The 24
+	 * high-order bits of `bb` are ignored.  If the input byte is the beginning
+	 * of a group of bytes that constitute a non ASCII character in UTF8, wait
+	 * for the next bytes and concatenate them together before printing the
+	 * character.
 	 */
 	override fun write(bb: Int) {
 		if ((bb and 0b1000_0000) == 0b0000_0000) {
 			// ASCII character.
 			buffer = bb
-			counter = 0
+			remainingBytes = 0
 		}
 		else if ((bb and 0b1100_0000) == 0b1100_0000) {
-			// Beginning of a Unicode packet.
+			// Beginning of a UTF8 packet.
 			if ((bb and 0b1110_0000) == 0b1100_0000) {
 				// 2 bytes packet.
 				buffer = bb and 0b0001_1111
-				counter = 1
+				remainingBytes = 1
 			}
 			else if ((bb and 0b1111_0000) == 0b1110_0000) {
 				// 3 bytes packet.
 				buffer = bb and 0b0000_1111
-				counter = 2
+				remainingBytes = 2
 			}
 			else {
 				// 4 bytes packet.  Assuming that the data stream is properly
 				// formatted, and not checking that the input is of the form
 				// 0b1111_0xxxx.
 				buffer = bb and 0b0000_0111
-				counter = 3
+				remainingBytes = 3
 			}
 		}
 		else {
-			// Continuation of a Unicode packet.  Assuming that the data stream
-			// is properly formatted, and not checking that the input is of the
+			// Continuation of a UTF8 packet.  Assuming that the data stream is
+			// properly formatted, and not checking that the input is of the
 			// form 0b10xx_xxxx.
 			buffer = buffer shl 6
 			buffer = buffer or (bb and 0b0011_1111)
-			counter--
+			remainingBytes--
 		}
 
-		if (counter == 0) {
+		if (remainingBytes == 0) {
+			// No more bytes are necessary for this character, print it.
 			try {
 				document.insertString(document.length, Char(buffer).toString(), attributeSet)
 				textPane.caretPosition = textPane.document.length
 			}
-			catch (ee: BadLocationException) {
+			catch (ee: Exception) {
 				JOptionPane.showMessageDialog(
 					null, ee.message, "Console Error", JOptionPane.ERROR_MESSAGE
 				)

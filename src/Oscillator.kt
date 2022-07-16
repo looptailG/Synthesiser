@@ -203,7 +203,7 @@ fun stringToOscillatorType(oscillatorType: String): OscillatorType {
 		"TRIANGLE" -> OscillatorType.TRIANGLE
 
 		else -> {
-			System.err.println("Unrecognise oscillator type: $oscillatorType")
+			System.err.println("Unrecognised oscillator type: $oscillatorType")
 			System.err.println("This oscillator has been replaced by a SQUARE oscillator.")
 			OscillatorType.SQUARE
 		}
